@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: efsun-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: efsun
+      POSTGRES_PASSWORD: efsun_sifre
+      POSTGRES_DB: efsun_market
+    ports:
+      - "5432:5432"
+    volumes:
+      - efsun_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U efsun -d efsun_market"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: efsun-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://efsun:efsun_sifre@postgres:5432/efsun_market?schema=public"
+      PORT: 4000
+      NODE_ENV: production
+      JWT_SECRET: "degistir-bu-anahtari-production-ortaminda"
+      CORS_ORIGIN: "http://localhost:5173"
+      SEED_ADMIN_EMAIL: "admin@efsunmarket.com"
+      SEED_ADMIN_PASSWORD: "Efsun2026!"
+    ports:
+      - "4000:4000"
+    volumes:
+      - efsun_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: "http://localhost:4000/api"
+    container_name: efsun-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  efsun_pgdata:
+  efsun_uploads:

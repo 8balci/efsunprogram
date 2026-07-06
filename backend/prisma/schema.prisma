@@ -1,0 +1,153 @@
+// EFSUN Market Yonetim Sistemi - Veritabani Semasi (Faz 1)
+// Sonraki fazlarda Urun, Musteri, Tedarikci, CariHesap vb. modeller eklenecektir.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  YONETICI
+  KASIYER
+  MUHASEBE
+}
+
+enum OdemeTuru {
+  NAKIT
+  KART
+  HAVALE
+  FAST
+  QR
+  DIGER
+}
+
+enum KasaDurumu {
+  ACIK
+  KAPALI
+}
+
+model User {
+  id           String   @id @default(uuid())
+  adSoyad      String
+  email        String   @unique
+  sifreHash    String
+  rol          Rol      @default(KASIYER)
+  aktif        Boolean  @default(true)
+  beniHatirla  Boolean  @default(false)
+  sonGirisTarihi DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  acilanKasalar   KasaGunu[] @relation("AcanKullanici")
+  kapatilanKasalar KasaGunu[] @relation("KapatanKullanici")
+  gelirler        Gelir[]
+  giderler        Gider[]
+  islemLoglari    IslemLog[]
+
+  @@map("kullanicilar")
+}
+
+model KasaGunu {
+  id             String     @id @default(uuid())
+  tarih          DateTime   @unique @db.Date
+  acilisTutari   Decimal    @default(0) @db.Decimal(12, 2)
+  acilisSaat     DateTime   @default(now())
+  acilisNot      String?
+  durum          KasaDurumu @default(ACIK)
+
+  // Kasa kapanisinda hesaplanan/girilen alanlar
+  toplamGelir      Decimal? @db.Decimal(12, 2)
+  toplamGider      Decimal? @db.Decimal(12, 2)
+  beklenenKasa     Decimal? @db.Decimal(12, 2)
+  sayilanGercekKasa Decimal? @db.Decimal(12, 2)
+  kasaFarki        Decimal? @db.Decimal(12, 2)
+  kapanisSaat      DateTime?
+  kapanisNot       String?
+
+  acanKullaniciId    String
+  acanKullanici      User    @relation("AcanKullanici", fields: [acanKullaniciId], references: [id])
+  kapatanKullaniciId String?
+  kapatanKullanici   User?   @relation("KapatanKullanici", fields: [kapatanKullaniciId], references: [id])
+
+  gelirler Gelir[]
+  giderler Gider[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("kasa_gunleri")
+}
+
+model Gelir {
+  id         String    @id @default(uuid())
+  tarih      DateTime  @db.Date
+  saat       DateTime  @default(now())
+  tutar      Decimal   @db.Decimal(12, 2)
+  kategori   String
+  aciklama   String?
+  odemeTuru  OdemeTuru @default(NAKIT)
+
+  kasaGunuId String?
+  kasaGunu   KasaGunu? @relation(fields: [kasaGunuId], references: [id])
+
+  ekleyenId String
+  ekleyen   User   @relation(fields: [ekleyenId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("gelirler")
+  @@index([tarih])
+}
+
+model GiderKategori {
+  id       String  @id @default(uuid())
+  ad       String  @unique
+  varsayilan Boolean @default(false)
+
+  giderler Gider[]
+
+  @@map("gider_kategorileri")
+}
+
+model Gider {
+  id         String   @id @default(uuid())
+  tarih      DateTime @db.Date
+  saat       DateTime @default(now())
+  tutar      Decimal  @db.Decimal(12, 2)
+  aciklama   String?
+  belgeUrl   String?
+  odemeTuru  OdemeTuru @default(NAKIT)
+
+  kategoriId String
+  kategori   GiderKategori @relation(fields: [kategoriId], references: [id])
+
+  kasaGunuId String?
+  kasaGunu   KasaGunu? @relation(fields: [kasaGunuId], references: [id])
+
+  ekleyenId String
+  ekleyen   User   @relation(fields: [ekleyenId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("giderler")
+  @@index([tarih])
+}
+
+model IslemLog {
+  id         String   @id @default(uuid())
+  kullaniciId String
+  kullanici   User    @relation(fields: [kullaniciId], references: [id])
+  islemTipi   String  // OLUSTURMA, GUNCELLEME, SILME, GIRIS, CIKIS
+  modul       String  // KASA, GELIR, GIDER, AUTH, ...
+  aciklama    String?
+  ipAdresi    String?
+  createdAt   DateTime @default(now())
+
+  @@map("islem_loglari")
+}
